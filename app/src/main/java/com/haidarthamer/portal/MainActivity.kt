@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
             ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "Selected file"
         return try {
             contentResolver.openInputStream(uri)?.use { stream ->
-                val header = stream.readNBytes(4096)
+                val header = ByteArray(4096).also { buffer ->\n                    val count = stream.read(buffer)\n                    if (count < buffer.size) return@also\n                }
                 when {
                     header.size >= 2 && header[0] == 0x4D.toByte() && header[1] == 0x5A.toByte() ->
                         inspectPe(name, header)
@@ -72,10 +72,12 @@ class MainActivity : ComponentActivity() {
         var hasManifest = false
         var hasPayloadApp = false
         var machO = false
+        var inflatedBytes = 0L
         contentResolver.openInputStream(uri)?.use { raw ->
             ZipInputStream(raw).use { zip ->
                 var entry = zip.nextEntry
-                while (entry != null && entries.size < 1500) {
+                val scratch = ByteArray(8192)
+                while (entry != null && entries.size < 1000 && inflatedBytes < 32L * 1024 * 1024) {
                     val path = entry.name
                     if (!entry.isDirectory) {
                         entries += path
@@ -84,7 +86,13 @@ class MainActivity : ComponentActivity() {
                         if (path.startsWith("Payload/") && path.contains(".app/")) hasPayloadApp = true
                         if (path.endsWith(".dylib") || path.endsWith(".framework/")) machO = true
                     }
-                    zip.closeEntry()
+                    var n = zip.read(scratch)
+                    while (n > 0) {
+                        inflatedBytes += n
+                        if (inflatedBytes >= 32L * 1024 * 1024) break
+                        n = zip.read(scratch)
+                    }
+                    if (inflatedBytes >= 32L * 1024 * 1024) break
                     entry = zip.nextEntry
                 }
             }
