@@ -30,7 +30,9 @@ class MainActivity : ComponentActivity() {
             ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "Selected file"
         return try {
             contentResolver.openInputStream(uri)?.use { stream ->
-                val header = ByteArray(4096).also { buffer ->\n                    val count = stream.read(buffer)\n                    if (count < buffer.size) return@also\n                }
+                val header = ByteArray(4096).also { buffer ->
+                    stream.read(buffer)
+                }
                 when {
                     header.size >= 2 && header[0] == 0x4D.toByte() && header[1] == 0x5A.toByte() ->
                         inspectPe(name, header)
